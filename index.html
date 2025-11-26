@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MQTT Temperature & Device Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+        }
+        #status {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        .alarm {
+            color: red;
+            font-weight: bold;
+        }
+        .normal {
+            color: green;
+            font-weight: bold;
+        }
+        #owner-info {
+            margin-top: 30px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sensor Value Monitoring</h1>
+    <h2>Sensor Temperature: <span id="sensor-value">0</span> °C</h2>
+    <h3 id="status" class="normal">Normal</h3>
+
+    <div id="owner-info">
+        <h3>Device Owner</h3>
+        <p>Name &amp; ID: <span id="owner-text">Waiting for data...</span></p>
+    </div>
+
+    <script>
+        // Create a script element to load the MQTT.js library from the CDN
+        const mqttScript = document.createElement("script");
+        mqttScript.src = "https://unpkg.com/mqtt/dist/mqtt.min.js";
+
+        // When the script is loaded, initialize MQTT connection and logic
+        mqttScript.onload = function () {
+            console.log("MQTT.js library loaded successfully");
+
+            const THRESHOLD = 75;
+            const TEMP_TOPIC = "sensor/temperature";
+            const OWNER_TOPIC = "sensor/deviceOwner";
+            const MQTT_BROKER = "ws://broker.emqx.io:8083/mqtt";
+
+            // DOM elements
+            const sensorValueElement = document.getElementById("sensor-value");
+            const statusElement = document.getElementById("status");
+            const ownerTextElement = document.getElementById("owner-text");
+
+
+            // Connect to MQTT broker
+            const client = mqtt.connect(MQTT_BROKER);
+
+            client.on("connect", function () {
+                console.log("Successfully connected to the MQTT broker");
+
+                // Subscribe to both topics: temperature and owner info
+                client.subscribe([TEMP_TOPIC, OWNER_TOPIC], function (err) {
+                    if (!err) {
+                        console.log(`Subscribed to topics: ${TEMP_TOPIC}, ${OWNER_TOPIC}`);
+                    } else {
+                        console.error("Failed to subscribe:", err);
+                        statusElement.textContent = "Subscription Error";
+                        statusElement.className = "alarm";
+                    }
+                });
+            });
+
+            // Listen for incoming messages from the subscribed topic
+            client.on("message", function (topic, message) {
+                const payload = message.toString(); // raw string
+
+                // Temperature topic
+                if (topic === TEMP_TOPIC) {
+                    const value = parseFloat(payload);
+
+                    // Update the UI with the received sensor value
+                    sensorValueElement.textContent = value.toFixed(2);
+
+                    // Check if the value exceeds the threshold and update the status
+                    if (value > THRESHOLD) {
+                        statusElement.textContent = "Alarm! Value above threshold";
+                        statusElement.className = "alarm";
+                    } else {
+                        statusElement.textContent = "Normal";
+                        statusElement.className = "normal";
+                    }
+                }
+
+                // Device owner topic
+                if (topic === OWNER_TOPIC) {
+                    // We expect the payload as "Name - ID"
+                    ownerTextElement.textContent = payload;
+                }
+            });
+
+            // Handle connection errors
+            client.on("error", function (err) {
+                console.error("Connection error:", err);
+                statusElement.textContent = "Connection Error";
+                statusElement.className = "alarm";
+            });
+
+            // Handle disconnection from the MQTT broker
+            client.on("close", function () {
+                console.warn("Disconnected from MQTT broker");
+                statusElement.textContent = "Disconnected";
+                statusElement.className = "alarm";
+            });
+        };
+
+        // Append the script element to the document's head section to load the MQTT.js library
+        document.head.appendChild(mqttScript);
+    </script>
+</body>
+</html>
